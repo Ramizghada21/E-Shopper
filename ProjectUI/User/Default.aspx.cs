@@ -17,7 +17,7 @@ namespace ProjectUI.User
             {
                 LoadCategories();
             }
-            if (Session["UserId"] == null) // If user is not logged in
+            if (Session["UserId"] == null)
             {
                 Response.Redirect("login.aspx");
             }

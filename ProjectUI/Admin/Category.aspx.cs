@@ -13,28 +13,89 @@ namespace ProjectUI.Admin
         SqlConnection con;
         SqlDataAdapter da;
         DataTable dt;
-        
+
+        // Pagination variables
+        int pageIndex = 0;
+        int pageSize = 5; // Number of categories per page
+        PagedDataSource pg;
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            Session["breadCumbTitle"]="Manage Category";
-            Session["breadCumbPage"]="Category";
-            lblMsg.Visible = false;
-            getCategories();
+            if (!IsPostBack)
+            {
+                Session["breadCumbTitle"] = "Manage Category";
+                Session["breadCumbPage"] = "Category";
+                lblMsg.Visible = false;
+
+                // Set default page index if not set
+                if (Session["PageIndex"] == null)
+                {
+                    Session["PageIndex"] = 0;
+                }
+
+                getCategories();
+            }
         }
 
         void getCategories()
         {
             con = new SqlConnection(Util.getConnection());
             cmd = new SqlCommand("Category_Crud", con);
-            cmd.Parameters.AddWithValue("@Action","GETALL");
+            cmd.Parameters.AddWithValue("@Action", "GETALL");
             cmd.CommandType = CommandType.StoredProcedure;
             da = new SqlDataAdapter(cmd);
             dt = new DataTable();
             da.Fill(dt);
-            rCategory.DataSource = dt;
+
+            // Implement Pagination
+            pg = new PagedDataSource();
+            pg.DataSource = dt.DefaultView;
+            pg.AllowPaging = true;
+            pg.PageSize = pageSize;
+
+            // Get current page index
+            if (Session["PageIndex"] != null)
+            {
+                pageIndex = (int)Session["PageIndex"];
+            }
+            pg.CurrentPageIndex = pageIndex;
+
+            // Enable/Disable pagination buttons
+            btnPrevPage.Enabled = !pg.IsFirstPage;
+            btnNextPage.Enabled = !pg.IsLastPage;
+
+            // Display current page number
+            lblPageNumber.Text = "Page " + (pg.CurrentPageIndex + 1) + " of " + pg.PageCount;
+
+            rCategory.DataSource = pg;
             rCategory.DataBind();
         }
+
+        protected void btnNextPage_Click(object sender, EventArgs e)
+        {
+            if (Session["PageIndex"] != null)
+            {
+                pageIndex = (int)Session["PageIndex"];
+            }
+            pageIndex++; // Move to next page
+            Session["PageIndex"] = pageIndex;
+            getCategories();
+        }
+
+        protected void btnPrevPage_Click(object sender, EventArgs e)
+        {
+            if (Session["PageIndex"] != null)
+            {
+                pageIndex = (int)Session["PageIndex"];
+            }
+            if (pageIndex > 0)
+            {
+                pageIndex--; // Move to previous page
+            }
+            Session["PageIndex"] = pageIndex;
+            getCategories();
+        }
+
         protected void btnAddOrUpdate_Click(object sender, EventArgs e)
         {
             string imagePath = string.Empty, fileExtension = string.Empty;
@@ -71,13 +132,12 @@ namespace ProjectUI.Admin
             }
             else
             {
-                cmd.Parameters.AddWithValue("@CategoryImageUrl", DBNull.Value); // Fix missing parameter issue
+                cmd.Parameters.AddWithValue("@CategoryImageUrl", DBNull.Value);
                 isValidToExecute = true;
             }
 
             if (isValidToExecute)
             {
-                cmd.CommandType = CommandType.StoredProcedure;
                 try
                 {
                     con.Open();
@@ -118,7 +178,7 @@ namespace ProjectUI.Admin
         protected void rCategory_ItemCommand(object source, RepeaterCommandEventArgs e)
         {
             lblMsg.Visible = false;
-            if(e.CommandName == "edit")
+            if (e.CommandName == "edit")
             {
                 con = new SqlConnection(Util.getConnection());
                 cmd = new SqlCommand("Category_Crud", con);

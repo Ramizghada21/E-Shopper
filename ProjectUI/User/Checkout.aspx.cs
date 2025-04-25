@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Web;
-using System.Web.UI;
-using System.Web.UI.WebControls;
 using System.Data.SqlClient;
+using Razorpay.Api;
 
 namespace ProjectUI.User
 {
     public partial class Checkout : System.Web.UI.Page
     {
+
         protected void Page_Load(object sender, EventArgs e)
         {
             if (!IsPostBack)
@@ -17,6 +16,7 @@ namespace ProjectUI.User
                 LoadCart();
             }
         }
+
         private void LoadCart()
         {
             if (Session["UserId"] == null)
@@ -40,11 +40,7 @@ namespace ProjectUI.User
 
             using (SqlConnection conn = new SqlConnection(Util.getConnection()))
             {
-                string query = @"SELECT c.ProductId, p.ProductName, p.Price, c.Quantity 
-                                 FROM Cart c
-                                 INNER JOIN Product p ON c.ProductId = p.ProductId
-                                 WHERE c.UserId = @UserId";
-
+                string query = "SELECT c.ProductId, p.ProductName, p.Price, c.Quantity FROM Cart c INNER JOIN Product p ON c.ProductId = p.ProductId WHERE c.UserId = @UserId";
                 SqlCommand cmd = new SqlCommand(query, conn);
                 cmd.Parameters.AddWithValue("@UserId", userId);
 
@@ -66,18 +62,35 @@ namespace ProjectUI.User
 
         protected void btnPlaceOrder_Click(object sender, EventArgs e)
         {
-            if (Session["UserId"] == null) return;
-
             int userId = Convert.ToInt32(Session["UserId"]);
-            string orderNo = "ORD-" + DateTime.Now.Ticks.ToString(); // Unique Order Number
+            string orderNo = "ORD-" + DateTime.Now.Ticks;
+            decimal totalAmount = Convert.ToDecimal(lblTotal.Text);
 
-            int paymentId = InsertPaymentDetails();
-            if (paymentId == 0)
+            var client = new RazorpayClient("rzp_test_LWvBuAmAHDdJS8", "wZHmdNuX039PuLqc3RT96CXV");
+            Dictionary<string, object> options = new Dictionary<string, object>
             {
-                Response.Write("<script>alert('Payment failed. Please try again.');</script>");
-                return;
-            }
+                { "amount", totalAmount * 100 }, // Amount in paise
+                { "currency", "INR" },
+                { "receipt", orderNo },
+                { "payment_capture", 1 }
+            };
 
+            Order order = client.Order.Create(options);
+            string paymentId = order["id"].ToString();
+
+            if (!string.IsNullOrEmpty(paymentId))
+            {
+                ProcessOrder(userId, orderNo, paymentId);
+                Response.Redirect("OrderSuccess.aspx?OrderNo=" + orderNo);
+            }
+            else
+            {
+                // Handle payment failure
+            }
+        }
+
+        private void ProcessOrder(int userId, string orderNo, string paymentId)
+        {
             using (SqlConnection conn = new SqlConnection(Util.getConnection()))
             {
                 conn.Open();
@@ -86,58 +99,38 @@ namespace ProjectUI.User
                 try
                 {
                     List<CartItem> cart = GetCartItems(userId);
-
                     foreach (var item in cart)
                     {
-                        string insertOrderQuery = @"
-                            INSERT INTO OrderDetails (OrderNo, ProductId, Quantity, UserId, Status, PaymentId, OrderDate, IsCancel)
-                            VALUES (@OrderNo, @ProductId, @Quantity, @UserId, 'Pending', @PaymentId, GETDATE(), 0)";
-
+                        string insertOrderQuery = @"INSERT INTO OrderDetails (OrderNo, ProductId, Quantity, UserId, Status, PaymentId, OrderDate, IsCancel) VALUES (@OrderNo, @ProductId, @Quantity, @UserId, 'Confirmed', @PaymentId, GETDATE(), 0)";
                         SqlCommand cmd = new SqlCommand(insertOrderQuery, conn, transaction);
                         cmd.Parameters.AddWithValue("@OrderNo", orderNo);
                         cmd.Parameters.AddWithValue("@ProductId", item.productId);
                         cmd.Parameters.AddWithValue("@Quantity", item.quantity);
                         cmd.Parameters.AddWithValue("@UserId", userId);
                         cmd.Parameters.AddWithValue("@PaymentId", paymentId);
-
                         cmd.ExecuteNonQuery();
                     }
+
+                    string deleteCartQuery = "DELETE FROM Cart WHERE UserId = @UserId";
+                    SqlCommand deleteCmd = new SqlCommand(deleteCartQuery, conn, transaction);
+                    deleteCmd.Parameters.AddWithValue("@UserId", userId);
+                    deleteCmd.ExecuteNonQuery();
 
                     transaction.Commit();
                 }
                 catch (Exception ex)
                 {
                     transaction.Rollback();
-                    Response.Write("<script>alert('Order failed: " + ex.Message + "');</script>");
-                    return;
+                    // Handle exception
                 }
             }
-
-            Response.Redirect("Default.aspx?OrderNo=" + orderNo);
         }
-
-        private int InsertPaymentDetails()
+        public class CartItem
         {
-            int paymentId = 0;
-            using (SqlConnection conn = new SqlConnection(Util.getConnection()))
-            {
-                string insertPaymentQuery = @"
-                    INSERT INTO Payment (Name, CardNo, ExpiryDate, CvvNo, Address, PaymentMode)
-                    OUTPUT INSERTED.PaymentId
-                    VALUES (@Name, @CardNo, @ExpiryDate, @CvvNo, @Address, @PaymentMode)";
-
-                SqlCommand cmd = new SqlCommand(insertPaymentQuery, conn);
-                cmd.Parameters.AddWithValue("@Name", txtCardName.Text);
-                cmd.Parameters.AddWithValue("@CardNo", txtCardNumber.Text);
-                cmd.Parameters.AddWithValue("@ExpiryDate", txtExpiryDate.Text);
-                cmd.Parameters.AddWithValue("@CvvNo", Convert.ToInt32(txtCVV.Text));
-                cmd.Parameters.AddWithValue("@Address", txtAddress.Text);
-                cmd.Parameters.AddWithValue("@PaymentMode", ddlPaymentMode.SelectedValue);
-
-                conn.Open();
-                paymentId = Convert.ToInt32(cmd.ExecuteScalar());
-            }
-            return paymentId;
+            public int productId { get; set; }
+            public string productName { get; set; }
+            public decimal price { get; set; }
+            public int quantity { get; set; }
         }
     }
 }

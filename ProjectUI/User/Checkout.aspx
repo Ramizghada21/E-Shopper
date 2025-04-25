@@ -1,6 +1,7 @@
 ﻿<%@ Page Title="Checkout" Language="C#" MasterPageFile="~/User/User.Master" AutoEventWireup="true" CodeBehind="Checkout.aspx.cs" Inherits="ProjectUI.User.Checkout" %>
 
 <asp:Content ID="Content1" ContentPlaceHolderID="head" runat="server">
+     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </asp:Content>
 
 <asp:Content ID="Content2" ContentPlaceHolderID="ContentPlaceHolder1" runat="server">
@@ -84,12 +85,45 @@
                     </div>
                 </div>
 
-                <!-- Place Order Button -->
                 <div class="d-flex justify-content-center mt-4">
-                    <asp:Button ID="btnPlaceOrder" runat="server" Text="Place Order" CssClass="btn btn-primary w-50 py-3" OnClick="btnPlaceOrder_Click" />
-                </div>
+        <asp:Button ID="btnPlaceOrder" runat="server" Text="Pay Now" CssClass="btn btn-primary w-50 py-3" OnClientClick="return initiateRazorpay();" />
+    </div>
+
+    <asp:HiddenField ID="hdnAmount" runat="server" />
+    <asp:HiddenField ID="hdnOrderNo" runat="server" />
+    <asp:HiddenField ID="hdnPaymentId" runat="server" />
             </div>
         </div>
     </div>
+    
 
+    <script type="text/javascript">
+        function initiateRazorpay() {
+            var amount = document.getElementById('<%= hdnAmount.ClientID %>').value;
+            var orderNo = document.getElementById('<%= hdnOrderNo.ClientID %>').value;
+
+            var options = {
+                "key": "rzp_test_LWvBuAmAHDdJS8", // Your Razorpay Key
+                "amount": amount * 100, // in paise
+                "currency": "INR",
+                "name": "Online Store",
+                "description": "Order Payment",
+                "handler": function (response) {
+                    document.getElementById('<%= hdnPaymentId.ClientID %>').value = response.razorpay_payment_id;
+                    __doPostBack('<%= btnPlaceOrder.UniqueID %>', '');
+                },
+                "prefill": {
+                    "name": "<%= txtFirstName.Text %> <%= txtLastName.Text %>",
+                    "email": "<%= txtEmail.Text %>",
+                    "contact": "<%= txtMobile.Text %>"
+                },
+                "theme": {
+                    "color": "#3399cc"
+                }
+            };
+            var rzp = new Razorpay(options);
+            rzp.open();
+            return false;
+        }
+    </script>
 </asp:Content>

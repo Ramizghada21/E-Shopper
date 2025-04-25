@@ -33,7 +33,7 @@ namespace ProjectUI.User
             decimal subtotal = cart.Sum(item => item.price * item.quantity);
             lblSubtotal.Text = subtotal.ToString("F2");
 
-            decimal shipping = cart.Count > 0 ? 10 : 0; // Apply shipping only if items exist
+            decimal shipping = cart.Count > 0 ? 10 : 0;
             lblShipping.Text = shipping.ToString("F2");
 
             decimal total = subtotal + shipping;
